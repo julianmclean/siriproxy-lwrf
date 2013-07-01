@@ -57,7 +57,7 @@ class SiriProxy::Plugin::Lwrf < SiriProxy::Plugin
       listen_for (/(?:(?:dim)|(?:set)|(?:turn up)|(?:turn down)|(?:set level on)|(?:set the level on)) the (#{room["name"]}) (#{deviceName}) to ([1-9][0-9]?)(?:%| percent)?/i)        { |roomName, deviceName, action| send_lwrf_command('device',roomName,deviceName,action) }
     end
     
-    if room.has_key('mood')
+    if room.has_key?('mood')
       room["mood"].each do | moodName |    
         # Commands to set a mood in a room
         listen_for (/(?:(?:set)|(?:activate)) (?:the ) mood (#{moodName}) in the (#{room["name"]})/i) { |moodName, roomName| send_lwrf_command('mood',roomName,moodName) }
