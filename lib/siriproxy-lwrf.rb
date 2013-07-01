@@ -43,7 +43,8 @@ class SiriProxy::Plugin::Lwrf < SiriProxy::Plugin
   end
 
   # Commands for Rooms and Devices
-  LightWaveRF.new.get_config['room'].each do | room |
+  lwrf = LightWaveRF.new
+  lwrf.get_config['room'].each do | room |
     room["device"].each do | deviceName |    
       # Commands to turn on/off a device in a room
       listen_for (/turn (on|off) the (#{deviceName}) in the (#{room["name"]})/i) { |action, deviceName, roomName| send_lwrf_command('device',roomName,deviceName,action) }
@@ -56,15 +57,19 @@ class SiriProxy::Plugin::Lwrf < SiriProxy::Plugin
       listen_for (/(?:(?:dim)|(?:set)|(?:turn up)|(?:turn down)|(?:set level on)|(?:set the level on)) the (#{room["name"]}) (#{deviceName}) to ([1-9][0-9]?)(?:%| percent)?/i)        { |roomName, deviceName, action| send_lwrf_command('device',roomName,deviceName,action) }
     end
     
-    room["mood"].each do | moodName |    
-      # Commands to set a mood in a room
-      listen_for (/(?:(?:set)|(?:activate)) (?:the )(#{moodName}) in the (#{room["name"]})/i) { |moodName, roomName| send_lwrf_command('mood',roomName,moodName) }
+    if room.has_key('mood')
+      room["mood"].each do | moodName |    
+        # Commands to set a mood in a room
+        listen_for (/(?:(?:set)|(?:activate)) (?:the ) mood (#{moodName}) in the (#{room["name"]})/i) { |moodName, roomName| send_lwrf_command('mood',roomName,moodName) }
+        listen_for (/(?:(?:set)|(?:activate)) (?:the ) (#{moodName}) mood in the (#{room["name"]})/i) { |moodName, roomName| send_lwrf_command('mood',roomName,moodName) }
+      end
     end
   end
   
-  LightWaveRF.new.get_config['sequence'].each do | config, sequenceName |
+  lwrf.get_config['sequence'].each do | config, sequenceName |
     # Commands to run a sequence
-    listen_for (/(?:(?:run)|(?:launch)|(?:activate)) (?:the )(?:sequence )(#{sequenceName}) /i) { |sequenceName| send_lwrf_command('sequence',sequenceName) }    
+    listen_for (/(?:(?:run)|(?:launch)|(?:activate)) (?:the) sequence (#{sequenceName}) /i) { |sequenceName| send_lwrf_command('sequence',sequenceName) }    
+    listen_for (/(?:(?:run)|(?:launch)|(?:activate)) (?:the )(#{sequenceName}) sequence/i) { |sequenceName| send_lwrf_command('sequence',sequenceName) }    
   end
   
 
