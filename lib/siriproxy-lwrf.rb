@@ -41,6 +41,8 @@ class SiriProxy::Plugin::Lwrf < SiriProxy::Plugin
     say "LightWave is in my control using the following config file: #{LightWaveRF.new.get_config_file rescue nil}", spoken: "LightWave is in my control!"
     request_completed
   end
+  
+  listen_for (/(set the (movie) mood in the (living))/i) { |moodName, roomName| send_lwrf_command('mood',roomName,moodName) }
 
   # Commands for Rooms and Devices
   lwrf = LightWaveRF.new
@@ -57,8 +59,11 @@ class SiriProxy::Plugin::Lwrf < SiriProxy::Plugin
       listen_for (/(?:(?:dim)|(?:set)|(?:turn up)|(?:turn down)|(?:set level on)|(?:set the level on)) the (#{room["name"]}) (#{deviceName}) to ([1-9][0-9]?)(?:%| percent)?/i)        { |roomName, deviceName, action| send_lwrf_command('device',roomName,deviceName,action) }
     end
     
+  listen_for (/test one/i) { |whatever| send_lwrf_command('device','living','lounge','on') }  
     if room.has_key?('mood')
-      room["mood"].each do | moodName |    
+        listen_for (/mood (movie) in the (living) room/i) { |moodName, roomName| send_lwrf_command('mood',roomName,moodName) }
+      room['mood'].each do | moodName |    
+        listen_for (/command (#{room["name"]}) (#{moodName})/i) { |roomName, moodName| send_lwrf_command('mood',roomName,moodName) }
         # Commands to set a mood in a room
         listen_for (/(?:(?:set)|(?:activate)) (?:the ) mood (#{moodName}) in the (#{room["name"]})/i) { |moodName, roomName| send_lwrf_command('mood',roomName,moodName) }
         listen_for (/(?:(?:set)|(?:activate)) (?:the ) (#{moodName}) mood in the (#{room["name"]})/i) { |moodName, roomName| send_lwrf_command('mood',roomName,moodName) }
@@ -67,6 +72,7 @@ class SiriProxy::Plugin::Lwrf < SiriProxy::Plugin
   end
   
   lwrf.get_config['sequence'].each do | config, sequenceName |
+    listen_for (/sequence (#{sequenceName}) /i) { |sequenceName| send_lwrf_command('sequence',sequenceName) }    
     # Commands to run a sequence
     listen_for (/(?:(?:run)|(?:launch)|(?:activate)) (?:the) sequence (#{sequenceName}) /i) { |sequenceName| send_lwrf_command('sequence',sequenceName) }    
     listen_for (/(?:(?:run)|(?:launch)|(?:activate)) (?:the )(#{sequenceName}) sequence/i) { |sequenceName| send_lwrf_command('sequence',sequenceName) }    
@@ -85,7 +91,7 @@ class SiriProxy::Plugin::Lwrf < SiriProxy::Plugin
   end
   
 
-  def send_lwrf_command (type, roomName, deviceName, action)  
+  def send_lwrf_command (type, roomName, deviceName = nil, action = nil)
     begin
       @debug and (puts "[Info - Lwrf] send_lwrf_command: Starting with arguments: type => #{type}, roomName => #{roomName}, deviceName => #{deviceName}, action => #{action} ")
       # initialise LightWaveRF Gem
@@ -105,7 +111,7 @@ class SiriProxy::Plugin::Lwrf < SiriProxy::Plugin
             mood = room["mood"].detect {|d| d.downcase == deviceName} if room["mood"]
             if mood
               say "Setting mood #{mood} in the #{room["name"]}."
-              lwrf.mood "#{room["name"]}", "#{mood}", @debug rescue nil
+              lwrf.mood room["name"], mood, @debug rescue nil
               @debug and (puts "[Info - Lwrf] send_lwrf_command: Command sent to LightWaveRF Gem" )
             else
               say "I'm sorry, I can't find a mood called '#{deviceName}' in the '#{roomName}'."
