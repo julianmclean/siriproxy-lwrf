@@ -45,53 +45,59 @@ class SiriProxy::Plugin::Lwrf < SiriProxy::Plugin
   # Commands for Rooms and Devices
   lwrf = LightWaveRF.new
   
-  # Commands to turn on/off all the devices in a room
-  listen_for (/(?:(?:turn)|(?:switch)) off all(?: the) lights in the(?: (?:house)|(?:property)|(?:place)|(?:home))/i) { | | send_lwrf_command('mood','all','alloff') }
-
-  lwrf.get_config['room'].each do | room |
-    
-    # Commands to turn on/off all the devices in a room
-    listen_for (/(?:(?:turn)|(?:switch)) off all(?: the) lights in the (#{room["name"]})(?: room)/i) { |roomName| send_lwrf_command('mood',roomName,'alloff') }
-    listen_for (/(?:(?:turn)|(?:switch)) on all(?: the) lights in the (#{room["name"]})(?: room)/i) { |roomName| send_lwrf_command('mood',roomName,'allon') }
-
-    # Commands to dim all the devices in a room
-    listen_for (/(?:(?:dim)|(?:set)|(?:turn up)|(?:turn down)|(?:set level on)|(?:set the level on)) all(?: the) lights in the (#{room["name"]})(?: room) to ([1-9][0-9]?)(?:%| percent)?/i) { |roomName, action| send_lwrf_command('mood',roomName,'all' + action) }
-    listen_for (/(?:(?:dim)|(?:set)|(?:turn up)|(?:turn down)|(?:set level on)|(?:set the level on)) all(?: the) lights in the (#{room["name"]})(?: room) to (?: a)(low|mid|high|full)(:? level)/i) { |roomName, action| send_lwrf_command('mood',roomName,'all' + action) }
-
-    # Devices
-    room["device"].each do | deviceName |    
-      # Commands to turn on/off a device in a room
-      listen_for (/turn (on|off) the (#{deviceName}) in the (#{room["name"]})(?: room)/i) { |action, deviceName, roomName| send_lwrf_command('device',roomName,deviceName,action) }
-      listen_for (/turn (on|off) the (#{room["name"]})(?: room) (#{deviceName})/i)        { |action, roomName, deviceName| send_lwrf_command('device',roomName,deviceName,action) }
-      listen_for (/turn the (#{deviceName}) in the (#{room["name"]})(?: room) (on|off)/i) { |deviceName, roomName, action| send_lwrf_command('device',roomName,deviceName,action) }
-      listen_for (/turn the (#{room["name"]})(?: room) (#{deviceName}) (on|off)/i)        { |roomName, deviceName, action| send_lwrf_command('device',roomName,deviceName,action) }
-
-      # Commands to dim a devices in a room
-      listen_for (/(?:(?:dim)|(?:set)|(?:turn up)|(?:turn down)|(?:set level on)|(?:set the level on)) the (#{deviceName}) in the (#{room["name"]})(?: room) to ([1-9][0-9]?)(?:%| percent)?/i) { |deviceName, roomName, action| send_lwrf_command('device',roomName,deviceName,action) }
-      listen_for (/(?:(?:dim)|(?:set)|(?:turn up)|(?:turn down)|(?:set level on)|(?:set the level on)) the (#{deviceName}) in the (#{room["name"]})(?: room) to (?: a)(low|mid|high|full)(:? level)/i) { |deviceName, roomName, action| send_lwrf_command('device',roomName,deviceName,action) }
-      listen_for (/(?:(?:dim)|(?:set)|(?:turn up)|(?:turn down)|(?:set level on)|(?:set the level on)) the (#{room["name"]})(?: room) (#{deviceName}) to ([1-9][0-9]?)(?:%| percent)?/i)        { |roomName, deviceName, action| send_lwrf_command('device',roomName,deviceName,action) }
-      listen_for (/(?:(?:dim)|(?:set)|(?:turn up)|(?:turn down)|(?:set level on)|(?:set the level on)) the (#{room["name"]})(?: room) (#{deviceName}) to (?: a)(low|mid|high|full)(:? level)/i)        { |roomName, deviceName, action| send_lwrf_command('device',roomName,deviceName,action) }
-
-    end
-    
-    # Moods
-    if room.has_key?('mood')
-      room['mood'].each do | moodName |    
-        # Commands to set a mood in a room
-        listen_for (/mood (#{room["name"]}) (#{moodName})/i) { |roomName, moodName| send_lwrf_command('mood',roomName,moodName) }
-        listen_for (/(?:(?:set)|(?:activate))(?: the) mood(?: called) (#{moodName}) in the (#{room["name"]})(?: room)/i) { |moodName, roomName| send_lwrf_command('mood',roomName,moodName) }
-        listen_for (/(?:(?:set)|(?:activate))(?: the) (#{moodName}) mood in the (#{room["name"]})(?: room)/i) { |moodName, roomName| send_lwrf_command('mood',roomName,moodName) }
-      end
-    end
-  end
+  #######################
+  # Command regexes start
+  #######################
   
-  # Sequences
-  lwrf.get_config['sequence'].each do | config, sequenceName |
-    # Commands to run a sequence
-    listen_for (/sequence (#{sequenceName})/i) { |sequenceName| send_lwrf_command('sequence',sequenceName) }    
-    listen_for (/(?:(?:run)|(?:launch)|(?:activate))(?: the) sequence(?: called) (#{sequenceName})/i) { |sequenceName| send_lwrf_command('sequence',sequenceName) }    
-    listen_for (/(?:(?:run)|(?:launch)|(?:activate))(?: the)(#{sequenceName}) sequence/i) { |sequenceName| send_lwrf_command('sequence',sequenceName) }    
+  # Fragments
+  switch = '(?:(?:turn)|(?:switch))'
+  adjust = '(?:(?:dim)|(?:brighten)|(?:set)|(?:adjust)|(?:turn up)|(?:turn down))'
+  house = '(?:(?:house)|(?:property)|(?:place)|(?:home))'
+  all = '(?:(all(?: the)? lights)|(?:everything))'
+  percent = '([1-9][0-9]?)(?:%| percent)?'
+  level = '(\w+)(?: (?:level|setting|brightness)?)?'
+  set = '(?:(?:set)|(?:activate)|(?:enable)|(?:change))'
+  mood = '(?:(?:mood)|(?:mode)|(?:setting))'
+  run = '(?:(?:run)|(?:launch)|(?:activate))'
+  update = '(?:(?:update)|(?:download))'
+  data = '(?:(?:config)|(?:setup)|(?:data)|(?:device list))'
+  roomWord = '(?: (room|area|space))?'
+  deviceWord = '(?: (light|lamp))?'
+  
+  # Commands to update config file
+  listen_for (/#{update}(?: (?:my)|(?:the)) lightwave #{data}/i) do 
+    unless @lwrfAuth.nil?
+      say "Updating the LightwaveRF configuration for #{@lwrfAuth[:email]} from the server"
+      LightWaveRF.new.update_config @lwrfAuth[:email], @lwrfAuth[:pin], @debug rescue nil
+    else
+      say "I'm sorry, I don't seem to have access to the server. Have you updated the config file correctly?"
+    end
+    request_completed
   end
+    
+  # Commands to control all the devices in the house
+  listen_for (/#{switch} off #{all}(?: the) lights(?: (?:in)|(?:at))(?: the)? #{house}/i) { | | send_lwrf_command('mood','all','alloff') }
+  
+  # Commands to control all the devices in a single room
+  listen_for (/#{switch} (on|off) #{all} in(?: the)? (\w+)#{roomWord}/i) { | action, roomName, roomWord | send_lwrf_command('mood',roomName, roomWord,'all'+action) }
+  listen_for (/#{dim} all(?: the)? lights in(?: the)? (\w+)#{roomWord} to (?:a )?#{percent}/i) { |roomName, action, roomWord| send_lwrf_command('mood',roomName, roomWord,'all' + action) }
+  listen_for (/#{dim} all(?: the)? lights in(?: the)? (\w+)#{roomWord} to (?:a )?#{level}/i) { |roomName, action, roomWord| send_lwrf_command('mood',roomName, roomWord,'all' + action) }
+  
+  # Commands to control a single devices in a single room
+  listen_for (/#{switch} (on|off)(?: the)? (#{deviceName})#{deviceWord} in(?: the)? (#{room["name"]})#{roomWord}/i) { | action, deviceName, roomName, roomWord | send_lwrf_command('device',roomName,roomWord,deviceName,deviceWord,action) }
+  listen_for (/#{switch} (on|off)(?: the)? (#{room["name"]})#{roomWord} (#{deviceName})#{deviceWord}/i) { | action, roomName, deviceName, roomWord | send_lwrf_command('device',roomName,roomWord,deviceName,deviceWord,action) }
+  listen_for (/#{dim}(?: the)? (#{deviceName})#{deviceWord} in(?: the)? (#{room["name"]})#{roomWord} to (?:a )?#{percent}/i) { |deviceName, roomName, action, roomWord| send_lwrf_command('device',roomName,roomWord,deviceName,deviceWord,action) }
+  listen_for (/#{dim}(?: the)? (#{deviceName})#{deviceWord} in(?: the)? (#{room["name"]})#{roomWord} to (?:a )?#{level}/i) { |deviceName, roomName, action, roomWord| send_lwrf_command('device',roomName,roomWord,deviceName,deviceWord,action) }
+  listen_for (/#{dim}(?: the)? (#{room["name"]})#{roomWord} (#{deviceName})#{deviceWord} to (?:a )#{percent}/i) { |roomName, deviceName, action, roomWord| send_lwrf_command('device',roomName,roomWord,deviceName,deviceWord,action) }
+  listen_for (/#{dim}(?: the)? (#{room["name"]})#{roomWord} (#{deviceName})#{deviceWord} to (?:a )?#{level}/i) { |roomName, deviceName, action, roomWord| send_lwrf_command('device',roomName,roomWord,deviceName,deviceWord,action) }
+
+  # Commands to set a mood in a single room
+  listen_for (/#{set}(?: the)?(?: lighting)? mood(?: called)? (#{moodName}) in(?: the)? (#{room["name"]})#{roomWord}/i) { |moodName, roomName, roomWord| send_lwrf_command('mood',roomName, roomWord,moodName) }
+  listen_for (/#{set}(?: the)? (#{moodName})(?: lighting)?  mood in(?: the)? (#{room["name"]})#{roomWord}/i) { |moodName, roomName, roomWord| send_lwrf_command('mood',roomName, roomWord,moodName) }
+
+  # Commands to run a sequence
+  listen_for (/#{run}(?: the)? sequence(?: called)? (#{sequenceName})/i) { |sequenceName| send_lwrf_command('sequence',sequenceName) }    
+  listen_for (/#{run}(?: the)? (#{sequenceName}) sequence/i) { |sequenceName| send_lwrf_command('sequence',sequenceName) }
   
   # Custom commands
   if lwrf.get_config.has_key?('custom_phrases')
@@ -105,46 +111,97 @@ class SiriProxy::Plugin::Lwrf < SiriProxy::Plugin
     end
   end
   
-  # Commands to update config file
-  listen_for (/(?:(?:update)|(?:download))(?: my)? lightwave (?:(?:config)|(?:setup)|(?:data)|(?:device list))/i) do 
-    unless @lwrfAuth.nil?
-      say "Updating the LightwaveRF configuration for #{@lwrfAuth[:email]} from the server"
-      LightWaveRF.new.update_config @lwrfAuth[:email], @lwrfAuth[:pin], @debug rescue nil
-    else
-      say "I'm sorry, I don't seem to have access to the server. Have you updated the config file correctly?"
-    end
-    request_completed
-  end
-
+  #######################
+  # Command regexes end
+  #######################
+  
+  ## Commands to turn on/off all the devices in a room
+  #listen_for (/(?:(?:turn)|(?:switch)) off all(?: the) lights in the(?: (?:house)|(?:property)|(?:place)|(?:home))/i) { | | send_lwrf_command('mood','all','alloff') }
+  #
+  #lwrf.get_config['room'].each do | room |
+  #  
+  #  # Commands to turn on/off all the devices in a room
+  #  listen_for (/(?:(?:turn)|(?:switch)) off all(?: the) lights in the (#{room["name"]})(?: room)/i) { |roomName| send_lwrf_command('mood',roomName,'alloff') }
+  #  listen_for (/(?:(?:turn)|(?:switch)) on all(?: the) lights in the (#{room["name"]})(?: room)/i) { |roomName| send_lwrf_command('mood',roomName,'allon') }
+  #
+  #  # Commands to dim all the devices in a room
+  #  listen_for (/(?:(?:dim)|(?:set)|(?:turn up)|(?:turn down)|(?:set level on)|(?:set the level on)) all(?: the) lights in the (#{room["name"]})(?: room) to ([1-9][0-9]?)(?:%| percent)?/i) { |roomName, action| send_lwrf_command('mood',roomName,'all' + action) }
+  #  listen_for (/(?:(?:dim)|(?:set)|(?:turn up)|(?:turn down)|(?:set level on)|(?:set the level on)) all(?: the) lights in the (#{room["name"]})(?: room) to (?: a)(low|mid|high|full)(:? level)/i) { |roomName, action| send_lwrf_command('mood',roomName,'all' + action) }
+  #
+  #  # Devices
+  #  room["device"].each do | deviceName |    
+  #    # Commands to turn on/off a device in a room
+  #    listen_for (/turn (on|off) the (#{deviceName}) in the (#{room["name"]})(?: room)/i) { |action, deviceName, roomName| send_lwrf_command('device',roomName,deviceName,action) }
+  #    listen_for (/turn (on|off) the (#{room["name"]})(?: room) (#{deviceName})/i)        { |action, roomName, deviceName| send_lwrf_command('device',roomName,deviceName,action) }
+  #    listen_for (/turn the (#{deviceName}) in the (#{room["name"]})(?: room) (on|off)/i) { |deviceName, roomName, action| send_lwrf_command('device',roomName,deviceName,action) }
+  #    listen_for (/turn the (#{room["name"]})(?: room) (#{deviceName}) (on|off)/i)        { |roomName, deviceName, action| send_lwrf_command('device',roomName,deviceName,action) }
+  #
+  #    # Commands to dim a devices in a room
+  #    listen_for (/(?:(?:dim)|(?:set)|(?:turn up)|(?:turn down)|(?:set level on)|(?:set the level on)) the (#{deviceName}) in the (#{room["name"]})(?: room) to ([1-9][0-9]?)(?:%| percent)?/i) { |deviceName, roomName, action| send_lwrf_command('device',roomName,deviceName,action) }
+  #    listen_for (/(?:(?:dim)|(?:set)|(?:turn up)|(?:turn down)|(?:set level on)|(?:set the level on)) the (#{deviceName}) in the (#{room["name"]})(?: room) to (?: a)(low|mid|high|full)(:? level)/i) { |deviceName, roomName, action| send_lwrf_command('device',roomName,deviceName,action) }
+  #    listen_for (/(?:(?:dim)|(?:set)|(?:turn up)|(?:turn down)|(?:set level on)|(?:set the level on)) the (#{room["name"]})(?: room) (#{deviceName}) to ([1-9][0-9]?)(?:%| percent)?/i)        { |roomName, deviceName, action| send_lwrf_command('device',roomName,deviceName,action) }
+  #    listen_for (/(?:(?:dim)|(?:set)|(?:turn up)|(?:turn down)|(?:set level on)|(?:set the level on)) the (#{room["name"]})(?: room) (#{deviceName}) to (?: a)(low|mid|high|full)(:? level)/i)        { |roomName, deviceName, action| send_lwrf_command('device',roomName,deviceName,action) }
+  #
+  #  end
+  #  
+  #  # Moods
+  #  if room.has_key?('mood')
+  #    room['mood'].each do | moodName |    
+  #      # Commands to set a mood in a room
+  #      listen_for (/mood (#{room["name"]}) (#{moodName})/i) { |roomName, moodName| send_lwrf_command('mood',roomName,moodName) }
+  #      listen_for (/(?:(?:set)|(?:activate))(?: the) mood(?: called) (#{moodName}) in the (#{room["name"]})(?: room)/i) { |moodName, roomName| send_lwrf_command('mood',roomName,moodName) }
+  #      listen_for (/(?:(?:set)|(?:activate))(?: the) (#{moodName}) mood in the (#{room["name"]})(?: room)/i) { |moodName, roomName| send_lwrf_command('mood',roomName,moodName) }
+  #    end
+  #  end
+  #end
+  #
+  ## Sequences
+  #lwrf.get_config['sequence'].each do | config, sequenceName |
+  #  # Commands to run a sequence
+  #  listen_for (/sequence (#{sequenceName})/i) { |sequenceName| send_lwrf_command('sequence',sequenceName) }    
+  #  listen_for (/(?:(?:run)|(?:launch)|(?:activate))(?: the) sequence(?: called) (#{sequenceName})/i) { |sequenceName| send_lwrf_command('sequence',sequenceName) }    
+  #  listen_for (/(?:(?:run)|(?:launch)|(?:activate))(?: the)(#{sequenceName}) sequence/i) { |sequenceName| send_lwrf_command('sequence',sequenceName) }    
+  #end
+    
   def run_custom_command (phrase)
     begin
-      case phrase['type']
+      if phrase.has_key?('action')
+        case phrase['action'][0]
         when 'mood'
-          send_lwrf_command('mood',phrase['room'],phrase['mood'])
+          send_lwrf_command('mood',phrase['action'][1],nil,phrase['action'][2])
         when 'sequence'
-          send_lwrf_command('sequence',phrase['sequence'])
+          send_lwrf_command('sequence',phrase['action'][1])
         else
-          send_lwrf_command('device',phrase['room'],phrase['device'],phrase['state'])
+          send_lwrf_command('device',phrase['action'][0],nil,phrase['action'][1],nil,phrase['action'][2].to_s)          
+        end
+      else
+        say "No action has been configured for this phrase. Please check your config file."  
       end
     rescue Exception
       pp $!
-      say "Sorry, I encountered an error"
+      say "Sorry, I encountered an error. Please check the action configured for this phrase."
       @debug and (puts "[Info - Lwrf] send_lwrf_command: Error => #{$!}" )
     end
   end  
 
-  def send_lwrf_command (type, roomName, deviceName = nil, action = nil)
+  def send_lwrf_command (type, roomName, roomWord = nil, deviceName = nil, deviceWord = nil, action = nil)
     begin
       @debug and (puts "[Info - Lwrf] send_lwrf_command: Starting with arguments: type => #{type}, roomName => #{roomName}, deviceName => #{deviceName}, action => #{action} ")
       # initialise LightWaveRF Gem
       @debug and (puts "[Info - Lwrf] send_lwrf_command: Instantiating LightWaveRF Gem")
       lwrf = LightWaveRF.new rescue nil
       @debug and (puts "[Info - Lwrf] send_lwrf_command: lwrf => #{lwrf}" )
+      # Get raw config
       lwrfConfig = lwrf.get_config rescue nil
+      # ...and also the processed version so we can access aliases, etc.
+      lwrfRooms = lwrf.get_rooms lwrfConfig
       @debug and (puts "[Info - Lwrf] send_lwrf_command: lwrfConfig => #{lwrfConfig}" )
       
+      #Create phrases to refer to the room/device using the user's natural language
+      roomPhrase = roomName + roomWord.nil? ? " " + roomWord : ""
+      devicePhrase = deviceName + deviceWord.nil? ? " " + deviceWord: ""
+      
       case type
-
       # if a mood...
       when 'mood'
         if roomName == 'all'
@@ -156,48 +213,48 @@ class SiriProxy::Plugin::Lwrf < SiriProxy::Plugin
             say "I'm only able to switch off all the lights in the house."            
           end          
         elsif deviceName[0,3] == 'all'
-          room = lwrfConfig["room"].detect {|r| r["name"].downcase == roomName}
+          room = lwrfRooms["room"].detect {|r| r["name"].downcase == roomName}
           if room
             state = deviceName[3..-1]
             case state
               when 'off'
-                say "Switching off all the lights in the #{room["name"]}."
+                say "Switching off all the lights in the #{roomPhrase}"
               when 'on'
-                say "Switching on all the lights in the #{room["name"]}."
+                say "Switching on all the lights in the #{roomPhrase}"
               when 'low'
-                say "Setting all the lights in the #{room["name"]} to a low level."
+                say "Setting all the lights in the #{roomPhrase} to a low level."
               when 'mid'
-                say "Setting all the lights in the #{room["name"]} to a mid level."
+                say "Setting all the lights in the #{roomPhrase} to a mid level."
               when 'high'
-                say "Setting all the lights in the #{room["name"]} to a high level."
+                say "Setting all the lights in the #{roomPhrase} to a high level."
               when 'full'
-                say "Setting all the lights in the #{room["name"]} to full."
+                say "Setting all the lights in the #{roomPhrase} to full."
               # TODO: need to fix this as state is text, not a number
               when 1..100
                 value = 'FdP' + ( state * 0.32 ).round.to_s
-                say "Setting all the lights in the #{room["name"]} to #{value} percent."
+                say "Setting all the lights in the #{roomPhrase} to #{value} percent."
               else
-                say "Setting all the lights in the #{room["name"]} to state: #{state}."
+                say "Setting all the lights in the #{roomPhrase} to state: #{state}."
             end
             lwrf.mood room["name"], deviceName, @debug rescue nil
             @debug and (puts "[Info - Lwrf] send_lwrf_command: Command sent to LightWaveRF Gem" )
           else
-            say "I'm sorry, I can't find '#{roomName}'."
+            say "I'm sorry, I can't find a room called '#{roomName}'."
           end          
         else
-          if lwrfConfig.has_key?("room")
-            room = lwrfConfig["room"].detect {|r| r["name"].downcase == roomName}
+          if lwrfRooms.has_key?("room")
+            room = lwrfRooms["room"].detect {|r| r["name"].downcase == roomName}
             if room
               mood = room["mood"].detect {|d| d.downcase == deviceName} if room["mood"]
               if mood
-                say "Setting mood #{mood} in the #{room["name"]}."
+                say "Setting mood #{mood} in the #{roomPhrase}."
                 lwrf.mood room["name"], mood, @debug rescue nil
                 @debug and (puts "[Info - Lwrf] send_lwrf_command: Command sent to LightWaveRF Gem" )
               else
-                say "I'm sorry, I can't find a mood called '#{deviceName}' in the '#{roomName}'."
+                say "I'm sorry, I can't find a mood called '#{deviceName}' in the room called '#{roomName}'."
               end
             else
-              say "I'm sorry, I can't find '#{roomName}'."
+              say "I'm sorry, I can't find a room called '#{roomName}'."
             end
           else    
             say "I'm sorry, I can't find any rooms in your config file."
@@ -221,22 +278,22 @@ class SiriProxy::Plugin::Lwrf < SiriProxy::Plugin
       # else a device
       else
         # Validate Inputs - NB: siri passes lowercase values, but lwrf.send is case sensitive!
-        if lwrfConfig.has_key?("room")
-          room = lwrfConfig["room"].detect {|r| r["name"].downcase == roomName}
+        if lwrfRooms.has_key?("room")
+          room = lwrfRooms["room"].detect {|r| r["name"].downcase == roomName}
           if room 
             device = room["device"].detect {|d| d.downcase == deviceName} if room["device"]
             if device
-              say "Turning #{action} the #{device} in the #{room["name"]}."
+              say "Turning #{action} the #{roomPhrase} in the #{roomPhrase}."
               lwrf.send "#{room["name"]}", "#{device}", "#{action}", @debug rescue nil
               @debug and (puts "[Info - Lwrf] send_lwrf_command: Command sent to LightWaveRF Gem" )
             else
-              say "I'm sorry, I can't find '#{deviceName}' in the '#{roomName}'."
+              say "I'm sorry, I can't find a device called '#{deviceName}' in the room called '#{roomName}'."
             end
           else
-            say "I'm sorry, I can't find '#{roomName}'."
+            say "I'm sorry, I can't find a room called '#{roomName}'."
           end
         else    
-          say "I'm sorry, I can't find either '#{roomName}' or '#{deviceName}'."
+          say "I'm sorry, I can't find a room called '#{roomName}'."
         end
       end
 
